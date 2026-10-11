@@ -1,8 +1,7 @@
 "use strict";
 
-/* ------------------------------------------------------------------ *
- * 1. DATA
- * ------------------------------------------------------------------ */
+
+
 const strawHats = [
   {
     id: "luffy", name: "Monkey D. Luffy", nickname: "Straw Hat Luffy", role: "Captain", bounty: 3000000000,
@@ -383,6 +382,8 @@ const hakiData = [
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** Runs fn shortly after the next paint. Uses a timer, so it still works where requestAnimationFrame is throttled. */
+const nextFrame = (fn) => setTimeout(fn, 30);
 const formatBerries = (n) => n.toLocaleString("en-US");
 const byId = Object.fromEntries(strawHats.map((c) => [c.id, c]));
 
@@ -489,10 +490,17 @@ function setupReveal() {
   }
   observeReveals(document);
 }
+/** Safety net: reveal anything already on screen even if IntersectionObserver is unavailable. */
+function revealInView() {
+  $$(".reveal:not(.in)").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.top < window.innerHeight * 0.95 && r.bottom > 0) el.classList.add("in");
+  });
+}
 function observeReveals(root, immediate = false) {
   $$(".reveal:not(.in)", root).forEach((el) => {
     if (immediate || !revealObserver) {
-      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("in")));
+      nextFrame(() => el.classList.add("in"));
     } else {
       revealObserver.observe(el);
     }
@@ -616,10 +624,9 @@ function openCharacterModal(id) {
   modal.hidden = false;
   document.body.classList.add("modal-open");
   dialog.scrollTop = 0;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    modal.classList.add("open");
-    $("#modalClose").focus({ preventScroll: true });
-  }));
+  void modal.offsetWidth; // force layout so the open transition runs
+  modal.classList.add("open");
+  $("#modalClose").focus({ preventScroll: true });
 }
 
 function closeCharacterModal() {
@@ -898,9 +905,9 @@ function showHaki(index) {
         <p class="haki-note">Fan-estimated mastery, for fun only.</p>
       </div>
     </div>`;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+  nextFrame(() => {
     $$(".meter-fill", panel).forEach((f) => { f.style.width = f.dataset.w + "%"; });
-  }));
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -1047,7 +1054,7 @@ function setupScrollEffects() {
     top.classList.toggle("show", y > 700);
     ticking = false;
   };
-  window.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  window.addEventListener("scroll", () => { update(); revealInView(); }, { passive: true });
   window.addEventListener("resize", update);
   top.addEventListener("click", () => window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }));
   update();
@@ -1191,6 +1198,7 @@ function init() {
   animateCounters();
   createHeroAtmosphere();
 
+  window.addEventListener("load", () => setTimeout(revealInView, 400));
   // Safety net: mark cached/instant images as loaded
   $$("img.img-fade").forEach((img) => { if (img.complete && img.naturalWidth) img.classList.add("loaded"); });
 }
